@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>隨車抽樣系統 - 班次分析</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="0.5"/></pattern></defs><rect width="100" height="100" fill="url(%23grid)"/></svg>');
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .upload-section {
+            padding: 40px;
+            text-align: center;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .upload-area {
+            border: 3px dashed #4a90e2;
+            border-radius: 15px;
+            padding: 40px;
+            background: linear-gradient(45deg, #f8fbff 0%, #e8f4fd 100%);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-area:hover {
+            border-color: #357abd;
+            background: linear-gradient(45deg, #e8f4fd 0%, #d1e9f8 100%);
+            transform: translateY(-2px);
+        }
+
+        .upload-area.dragover {
+            border-color: #2ecc71;
+            background: linear-gradient(45deg, #d5f4e6 0%, #c3f0d8 100%);
+        }
+
+        .upload-icon {
+            font-size: 4em;
+            color: #4a90e2;
+            margin-bottom: 20px;
+            animation: bounce 2s infinite;
+        }
+
+        @keyframes bounce {
+            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
+            40% { transform: translateY(-10px); }
+            60% { transform: translateY(-5px); }
+        }
+
+        .upload-text {
+            font-size: 1.3em;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        .upload-hint {
+            color: #666;
+            font-size: 1em;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .results-section {
+            padding: 40px;
+            display: none;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            transform: translateY(0);
+            transition: all 0.3s ease;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .search-filter {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-input, .filter-select {
+            padding: 12px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 25px;
+            font-size: 1em;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .search-input:focus, .filter-select:focus {
+            outline: none;
+            border-color: #4a90e2;
+            box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
+        }
+
+        .btn {
+            padding: 12px 25px;
+            background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: linear-gradient(135deg, #357abd 0%, #2c5aa0 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .data-table {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+
+        .table-container {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+            color: white;
+            padding: 18px 15px;
+            font-weight: 600;
+            text-align: left;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        /* 移除特殊樣式，使所有表頭保持一致 */
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid #f0f0f0;
+            transition: background-color 0.2s ease;
+        }
+
+        tr:hover {
+            background-color: #f8fbff;
+        }
+
+        .average-column, .sampling-column {
+            font-weight: 600;
+            color: #2ecc71;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #4a90e2;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            background: #ffe6e6;
+            border: 2px solid #ff6b6b;
+            color: #d63031;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .upload-section, .results-section {
+                padding: 25px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-filter {
+                flex-direction: column;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚌 隨車抽樣系統</h1>
+            <p>Excel檔案上傳與班次數據分析平台</p>
+        </div>
+
+        <div class="upload-section">
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📊</div>
+                <div class="upload-text">點擊或拖曳Excel檔案到此處</div>
+                <div class="upload-hint">支援 .xlsx 和 .xls 格式</div>
+            </div>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" />
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>正在處理檔案，請稍候...</p>
+        </div>
+
+        <div class="results-section" id="resultsSection">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="totalRoutes">0</div>
+                    <div class="stat-label">總路線數</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalOperators">0</div>
+                    <div class="stat-label">客運業者數</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="avgWeekday">0</div>
+                    <div class="stat-label">平日平均班次</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="avgHoliday">0</div>
+                    <div class="stat-label">假日平均班次</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="totalSampling">0</div>
+                    <div class="stat-label">總抽樣數</div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="search-filter">
+                    <input type="text" class="search-input" id="searchInput" placeholder="搜尋路線編號或客運業者...">
+                    <select class="filter-select" id="operatorFilter">
+                        <option value="">所有客運業者</option>
+                    </select>
+                    <button class="btn" id="resetBtn">重設篩選</button>
+                </div>
+                <button class="btn" id="exportBtn">匯出結果</button>
+            </div>
+
+            <div class="data-table">
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>路線編號</th>
+                                <th>客運業者</th>
+                                <th>公車類別</th>
+                                <th>平日班次</th>
+                                <th>假日班次</th>
+                                <th class="average-column">平均班次數</th>
+                                <th class="average-column">班次比例(%)</th>
+                                <th class="sampling-column">隨車抽樣數</th>
+                                <th class="sampling-column">問卷抽樣數</th>
+                                <th class="sampling-column">平假日分配</th>
+                                <th class="sampling-column">站牌數</th>
+                                <th class="sampling-column">抽查站牌數</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dataTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let originalData = [];
+        let filteredData = [];
+
+        // 初始化拖拽上傳功能
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // 處理檔案上傳
+        function handleFile(file) {
+            if (!file.name.match(/\.(xlsx|xls)$/i)) {
+                showError('請選擇Excel檔案（.xlsx 或 .xls）');
+                return;
+            }
+
+            showLoading(true);
+            hideError();
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+                    
+                    processData(jsonData);
+                } catch (error) {
+                    showError('檔案處理失敗：' + error.message);
+                    showLoading(false);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // 處理數據
+        function processData(rawData) {
+            try {
+                if (rawData.length < 2) {
+                    throw new Error('檔案內容不足');
+                }
+
+                const headers = rawData[0];
+                const expectedHeaders = ['路線編號', '客運業者', '平日', '假日'];
+                
+                // 尋找必要欄位的索引
+                const routeIndex = headers.findIndex(h => h.includes('路線') || h.includes('編號'));
+                const operatorIndex = headers.findIndex(h => h.includes('業者') || h.includes('公司'));
+                const weekdayIndex = headers.findIndex(h => h.includes('平日') || h.includes('工作日'));
+                const holidayIndex = headers.findIndex(h => h.includes('假日') || h.includes('休息日'));
+                const busTypeIndex = headers.findIndex(h => h.includes('類別') || h.includes('公車類別'));
+                const stopsCountIndex = headers.findIndex(h => h.includes('站牌數') || h.includes('站數'));
+                
+                // 驗證欄位
+                const hasRequiredColumns = expectedHeaders.every(header => 
+                    headers.includes(header)
+                );
+
+                if (!hasRequiredColumns) {
+                    throw new Error('檔案格式不正確，請確保包含：路線編號、客運業者、平日、假日 欄位');
+                }
+
+                originalData = [];
+                const operators = new Set();
+                let totalAverageShifts = 0;
+
+                for (let i = 1; i < rawData.length; i++) {
+                    const row = rawData[i];
+                    // 確保必要欄位存在
+                    if (routeIndex !== -1 && operatorIndex !== -1 && weekdayIndex !== -1 && holidayIndex !== -1 && 
+                        row[routeIndex] && row[operatorIndex]) {
+                        const weekdayShifts = parseFloat(row[weekdayIndex]) || 0;
+                        const holidayShifts = parseFloat(row[holidayIndex]) || 0;
+                        const averageShifts = ((weekdayShifts * 5) + (holidayShifts * 2)) / 7;
+                        const roundedAverageShifts = Math.round(averageShifts * 100) / 100;
+                        
+                        // 取得公車類別，如果有的話
+                        const busType = busTypeIndex !== -1 && row[busTypeIndex] ? row[busTypeIndex] : '';
+                        
+                        // 如果是幸福巴士或免費公車，隨車抽樣數為0，否則為20%並無條件進位
+                        let samplingCount = 0;
+                        if (busType !== '幸福巴士' && busType !== '免費公車') {
+                            samplingCount = Math.ceil(averageShifts * 0.2); // 20% 並無條件進位
+                        }
+                        
+                        totalAverageShifts += roundedAverageShifts;
+
+                        // 獲取站牌數，如果有的話
+                        const stopsCount = stopsCountIndex !== -1 && row[stopsCountIndex] ? parseFloat(row[stopsCountIndex]) : 0;
+                        
+                        // 計算抽查站牌數為站牌數的10%，四捨五入
+                        let inspectionStopsCount = Math.round(stopsCount * 0.1);
+                        
+                        if (busType === '市區公車' && inspectionStopsCount == 0) {   
+                            inspectionStopsCount = 1;
+                        }
+                        if (busType === '免費公車' || busType === '幸福巴士') {   
+                            inspectionStopsCount = 0;
+                        }
+
+                        originalData.push({
+                            routeNumber: row[routeIndex],
+                            operator: row[operatorIndex],
+                            weekdayShifts: weekdayShifts,
+                            holidayShifts: holidayShifts,
+                            averageShifts: roundedAverageShifts,
+                            samplingCount: samplingCount,
+                            stopsCount: stopsCount,
+                            inspectionStopsCount: inspectionStopsCount,
+                            busType: busType
+                        });
+
+                        operators.add(row[operatorIndex]);
+                    }
+                }
+                
+                // 計算每條路線的班次比例和問卷抽樣數
+                originalData.forEach(item => {
+                    item.shiftRatio = totalAverageShifts > 0 ? 
+                        Math.round((item.averageShifts / totalAverageShifts) * 10000) / 100 : 0; // 轉換為百分比並保留兩位小數
+                    
+                    // 計算問卷抽樣數 = 2500 * 班次比例 (四捨五入)
+                    const surveyRatio = item.shiftRatio / 100; // 將百分比轉換為小數
+                    let calculatedSurveySampling = Math.round(2500 * surveyRatio);
+                    
+                    // 如果是市區公車且問卷抽樣數小於5，則設為5
+                    if (item.busType === '市區公車' && calculatedSurveySampling < 5) {
+                        calculatedSurveySampling = 5;
+                    }
+                    
+                    // 如果是幸福巴士或免費公車且問卷抽樣數小於3，則設為3
+                    if ((item.busType === '幸福巴士' || item.busType === '免費公車') && calculatedSurveySampling < 3) {
+                        calculatedSurveySampling = 3;
+                    }
+                    
+                    item.surveySampling = calculatedSurveySampling;
+                    
+                    // 判斷是否需要分平假日
+                    if (calculatedSurveySampling > 30) {
+                        // 如果問卷抽樣數大於30，則分平假日
+                        const weekdayRatio = (item.weekdayShifts * 5) / ((item.weekdayShifts * 5) + (item.holidayShifts * 2));
+                        
+                        // 平日問卷抽樣數按比例計算
+                        item.weekdaySurveySampling = Math.round(calculatedSurveySampling * weekdayRatio);
+                        // 假日問卷抽樣數為總數扣除平日分配
+                        item.holidaySurveySampling = calculatedSurveySampling - item.weekdaySurveySampling;
+                        item.splitSurvey = '平日: ' + item.weekdaySurveySampling + ', 假日: ' + item.holidaySurveySampling;
+                    } else {
+                        // 如果問卷抽樣數不超過30，則不分平假日
+                        item.weekdaySurveySampling = 0;
+                        item.holidaySurveySampling = 0;
+                        item.splitSurvey = '不分平假日';
+                    }
+                });
+
+                updateOperatorFilter(Array.from(operators).sort());
+                filteredData = [...originalData];
+                updateDisplay();
+                showResults();
+                showLoading(false);
+
+            } catch (error) {
+                showError('數據處理失敗：' + error.message);
+                showLoading(false);
+            }
+        }
+
+        // 更新客運業者篩選器
+        function updateOperatorFilter(operators) {
+            const filterSelect = document.getElementById('operatorFilter');
+            filterSelect.innerHTML = '<option value="">所有客運業者</option>';
+            
+            operators.forEach(operator => {
+                const option = document.createElement('option');
+                option.value = operator;
+                option.textContent = operator;
+                filterSelect.appendChild(option);
+            });
+        }
+
+        // 更新顯示
+        function updateDisplay() {
+            updateStats();
+            updateTable();
+        }
+
+        // 更新統計數據
+        function updateStats() {
+            const totalRoutes = filteredData.length;
+            const operators = new Set(filteredData.map(item => item.operator));
+            const totalOperators = operators.size;
+            
+            const avgWeekday = totalRoutes > 0 ? 
+                Math.round((filteredData.reduce((sum, item) => sum + item.weekdayShifts, 0) / totalRoutes) * 100) / 100 : 0;
+            
+            const avgHoliday = totalRoutes > 0 ? 
+                Math.round((filteredData.reduce((sum, item) => sum + item.holidayShifts, 0) / totalRoutes) * 100) / 100 : 0;
+            
+            const totalSampling = filteredData.reduce((sum, item) => sum + item.samplingCount, 0);
+
+            document.getElementById('totalRoutes').textContent = totalRoutes;
+            document.getElementById('totalOperators').textContent = totalOperators;
+            document.getElementById('avgWeekday').textContent = avgWeekday;
+            document.getElementById('avgHoliday').textContent = avgHoliday;
+            document.getElementById('totalSampling').textContent = totalSampling;
+        }
+
+        // 更新表格
+        function updateTable() {
+            const tableBody = document.getElementById('dataTableBody');
+            tableBody.innerHTML = '';
+
+            filteredData.forEach(item => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${item.routeNumber}</td>
+                    <td>${item.operator}</td>
+                    <td>${item.busType || '-'}</td>
+                    <td>${item.weekdayShifts}</td>
+                    <td>${item.holidayShifts}</td>
+                    <td class="average-column">${item.averageShifts}</td>
+                    <td class="average-column">${item.shiftRatio}%</td>
+                    <td class="sampling-column">${item.samplingCount}</td>
+                    <td class="sampling-column">${item.surveySampling}</td>
+                    <td class="sampling-column">${item.splitSurvey}</td>
+                    <td class="sampling-column">${item.stopsCount || 0}</td>
+                    <td class="sampling-column">${item.inspectionStopsCount || 0}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        // 搜尋和篩選功能
+        document.getElementById('searchInput').addEventListener('input', applyFilters);
+        document.getElementById('operatorFilter').addEventListener('change', applyFilters);
+
+        function applyFilters() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const selectedOperator = document.getElementById('operatorFilter').value;
+
+            filteredData = originalData.filter(item => {
+                const matchesSearch = !searchTerm || 
+                    item.routeNumber.toString().toLowerCase().includes(searchTerm) ||
+                    item.operator.toLowerCase().includes(searchTerm);
+                
+                const matchesOperator = !selectedOperator || item.operator === selectedOperator;
+
+                return matchesSearch && matchesOperator;
+            });
+
+            updateDisplay();
+        }
+
+        // 重設篩選
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('operatorFilter').value = '';
+            filteredData = [...originalData];
+            updateDisplay();
+        });
+
+        // 匯出功能
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            if (filteredData.length === 0) return;
+
+            const exportData = [
+                ['路線編號', '客運業者', '公車類別', '平日班次', '假日班次', '平均班次數', '班次比例(%)', '隨車抽樣數', '問卷抽樣數', '平假日分配', '站牌數', '抽查站牌數']
+            ];
+
+            filteredData.forEach(item => {
+                exportData.push([
+                    item.routeNumber,
+                    item.operator,
+                    item.busType || '-',
+                    item.weekdayShifts,
+                    item.holidayShifts,
+                    item.averageShifts,
+                    item.shiftRatio + '%',
+                    item.samplingCount,
+                    item.surveySampling,
+                    item.splitSurvey,
+                    item.stopsCount || 0,
+                    item.inspectionStopsCount || 0
+                ]);
+            });
+
+            const ws = XLSX.utils.aoa_to_sheet(exportData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, '班次分析結果');
+            XLSX.writeFile(wb, `班次分析結果_${new Date().toISOString().split('T')[0]}.xlsx`);
+        });
+
+        // 輔助函數
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+
+        function showResults() {
+            document.getElementById('resultsSection').style.display = 'block';
+        }
+
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorMessage').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
